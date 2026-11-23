@@ -1,0 +1,96 @@
+name: vision-action-stage4
+
+x-backend: &backend
+  image: vision-action-stage4-backend:local
+  build:
+    context: ./backend
+  environment:
+    DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}"
+    DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+    VISION_DB: postgresql
+    POSTGRES_HOST: postgres
+    POSTGRES_DB: "${POSTGRES_DB:-vision_action_dev}"
+    POSTGRES_USER: "${POSTGRES_USER:-vision_action}"
+    POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+    VISION_MEDIA_ROOT: /app/private_media
+    FASTAPI_BASE_URL: http://fastapi:8001
+    ANALYSIS_MODE: celery
+    CELERY_BROKER_URL: redis://redis:6379/0
+  volumes:
+    - uploads:/app/private_media
+
+services:
+  django:
+    <<: *backend
+    command: ["sh", "-c", "python manage.py migrate --noinput && exec python manage.py runserver 0.0.0.0:8000 --noreload --insecure"]
+    ports:
+      - "127.0.0.1:${VISION_HTTP_PORT:-8012}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      fastapi:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/accounts/login/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  celery:
+    <<: *backend
+    command: ["celery", "-A", "config.celery:app", "worker", "--loglevel=INFO", "--concurrency=1"]
+    depends_on:
+      django:
+        condition: service_healthy
+
+  fastapi:
+    build:
+      context: ./ai_service
+    command: ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      YOLO_CONFIG_DIR: /tmp/ultralytics
+    volumes:
+      - type: bind
+        source: ./ai_service/models
+        target: /app/models
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - queue:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-vision_action_dev}"
+      POSTGRES_USER: "${POSTGRES_USER:-vision_action}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  database:
+  uploads:
+  queue:

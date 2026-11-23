@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>영상 분석</h1>
+<p>MP4를 올리면 작업 번호를 받고 상태 화면으로 이동합니다.</p>
+{% if form.errors %}
+<ul role="alert">{% for field, errors in form.errors.items %}
+  {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+{% endfor %}</ul>
+{% endif %}
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <p><label>제목 <input name="title" maxlength="120" value="{{ form.initial_data.title }}"></label></p>
+  <p><label>메모 <textarea name="memo" maxlength="2000">{{ form.initial_data.memo }}</textarea></label></p>
+  <p><label>MP4 영상 <input type="file" name="video" accept=".mp4,video/mp4" required></label></p>
+  <button type="submit">AI 분석 시작</button>
+</form>
+<h2>내 분석 기록</h2>
+<ul>{% for job in jobs %}
+  <li><a href="{% url 'analysis_detail' job.pk %}">{{ job.title|default:job.original_filename }}</a> · {{ job.status }}</li>
+{% empty %}<li>분석 기록이 없습니다.</li>{% endfor %}</ul>
+{% endblock %}

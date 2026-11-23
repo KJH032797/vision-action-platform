@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<h1>{{ job.title|default:job.original_filename }}</h1>
+<p>작업 번호 {{ job.pk }}</p>
+<p>작업 상태 <strong id="analysis-status">{% if job.status == "PENDING" %}대기{% elif job.status == "STARTED" %}처리 중{% elif job.status == "SUCCESS" %}완료{% else %}실패{% endif %}</strong></p>
+{% if job.status == "PENDING" or job.status == "STARTED" %}
+<p id="analysis-refresh" role="status" data-status-url="{% url 'analysis-detail' job.pk %}">상태를 자동으로 확인하고 있습니다.</p>
+<noscript><p>이 페이지를 새로고침하면 현재 상태를 확인할 수 있습니다.</p></noscript>
+<script src="{% static 'analyses/status.js' %}" defer></script>
+{% endif %}
+{% if job.memo %}<p>{{ job.memo }}</p>{% endif %}
+{% if job.error_message %}<p role="alert">{{ job.error_message }}</p>{% endif %}
+{% if job.status == "SUCCESS" %}
+<p>응답 상태 {{ job.result_status }} · {{ job.frames_read }}프레임 · {{ job.processing_time_sec }}초</p>
+{% if job.result_status == "NO_PERSON" %}<p>영상에서 사람이 검출되지 않았습니다.</p>{% endif %}
+{% if job.result_status == "NO_TRACKS" %}<p>추적 ID가 부여된 사람이 없습니다.</p>{% endif %}
+<ul>{% for person in job.predictions.all %}
+  <li>Track {{ person.track_id }} · {{ person.action_label }} · {{ person.status }} · 점수 {{ person.confidence|default_if_none:"없음" }}</li>
+{% endfor %}</ul>
+{% endif %}
+<p><a href="{% url 'analysis_list' %}">내 분석 목록</a></p>
+{% endblock %}

@@ -1,10 +1,10 @@
 name: vision-action-stage4
 
 x-backend: &backend
-  image: vision-action-stage4-backend:local
+  image: "${VISION_BACKEND_IMAGE:-vision-action-stage4-backend:local}"
   build:
     context: ./backend
-  environment:
+  environment: &backend-environment
     DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}"
     DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
     VISION_DB: postgresql
@@ -40,7 +40,12 @@ services:
 
   celery:
     <<: *backend
-    command: ["celery", "-A", "config.celery:app", "worker", "--loglevel=INFO", "--concurrency=1"]
+    init: true
+    command: ["sh", "/app/run-worker.sh"]
+    environment:
+      <<: *backend-environment
+      IP_WEBCAM_URL: "${IP_WEBCAM_URL:-}"
+      IP_WEBCAM_CAPTURE_SECONDS: "${IP_WEBCAM_CAPTURE_SECONDS:-8}"
     depends_on:
       django:
         condition: service_healthy

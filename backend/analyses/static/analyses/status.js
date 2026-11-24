@@ -3,7 +3,8 @@ const statusPanel = document.querySelector("[data-status-url]");
 if (statusPanel) {
     const refreshMessage = document.querySelector("#analysis-refresh");
     const statusText = document.querySelector("#analysis-status");
-    const labels = { PENDING: "대기", STARTED: "처리 중" };
+    const badge = document.querySelector("#job-header-status .badge");
+    const phases = { CONNECTING: "카메라 연결 중", CAPTURING: "영상 수집 중", ANALYZING: "AI 분석 중" };
 
     async function poll() {
         try {
@@ -25,7 +26,12 @@ if (statusPanel) {
                 window.location.reload();
                 return;
             }
-            statusText.textContent = labels[job.status] ?? job.status;
+            const label = job.status === "PENDING" ? "대기" : phases[job.phase] || "처리 중";
+            if (statusText.textContent.trim() !== label) statusText.textContent = label;
+            if (badge && job.status === "STARTED") {
+                badge.classList.replace("pending", "started");
+                badge.textContent = "처리 중";
+            }
             refreshMessage.textContent = "상태를 자동으로 확인하고 있습니다.";
         } catch {
             refreshMessage.textContent = "현재 상태를 읽지 못했습니다. 잠시 후 다시 확인합니다.";

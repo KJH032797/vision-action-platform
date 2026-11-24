@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}직원 통계 · Vision Action{% endblock %}
+{% block content %}
+<section class="page-heading"><div><h1>분석 통계</h1><p>작업 처리 현황과 사람별 예측 건수를 확인합니다.</p></div><a class="button secondary" href="{% url 'admin:index' %}">Django 관리자 ↗</a></section>
+<div class="overview-grid"><div class="card summary"><span>전체 작업</span><strong>{{ job_total }}</strong></div><div class="card summary"><span>사람별 예측</span><strong>{{ prediction_total }}</strong></div></div>
+<div class="chart-grid">
+  <section class="card chart"><h2>동작별 예측</h2><p class="muted">완료 작업의 Track별 결과를 세며 UNKNOWN은 별도로 표시합니다.</p>
+  {% for label, count in actions %}<div class="bar-row{% if label == 'UNKNOWN' %} unknown-bar{% endif %}"><span>{{ label }}</span><meter min="0" max="{{ action_max }}" value="{{ count }}" aria-label="{{ label }} 건수"></meter><strong>{{ count }}</strong></div>{% endfor %}</section>
+  <section class="card chart"><h2>작업 상태별 건수</h2>
+  {% for label, count in states %}<div class="bar-row"><span class="badge {{ label|lower }}">{{ label }}</span><meter min="0" max="{{ state_max }}" value="{{ count }}" aria-label="{{ label }} 건수"></meter><strong>{{ count }}</strong></div>{% endfor %}</section>
+</div>
+<section class="card history-card"><div class="card-title"><h2>최근 작업</h2></div><ul class="job-list">{% for job in recent %}
+  <li class="job-row"><div><strong>#{{ job.pk }} · {{ job.title|default:job.original_filename|default:job.get_input_type_display }}</strong><small>{{ job.user.username }} · {{ job.get_input_type_display }}</small></div><time datetime="{{ job.created_at|date:'c' }}">{{ job.created_at|date:"Y.m.d H:i" }}</time>{% include "analyses/status_badge.html" %}</li>
+{% empty %}<li class="empty">아직 작업이 없습니다.</li>{% endfor %}</ul></section>
+{% endblock %}

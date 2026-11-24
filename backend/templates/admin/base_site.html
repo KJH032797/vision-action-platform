@@ -1,0 +1,16 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block dark-mode-vars %}
+<script src="{% static 'analyses/theme.js' %}"></script>
+<link rel="stylesheet" href="{% static 'admin/css/dark_mode.css' %}">
+<link rel="stylesheet" href="{% static 'analyses/admin-theme.css' %}">
+{% endblock %}
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}"><span class="va-mark" aria-hidden="true">V</span> Vision Action 관리</a></div>
+{% endblock %}
+{% block nav-global %}
+<div class="va-tools">
+  {% if has_permission %}<a href="{% url 'dashboard' %}">직원 통계</a>{% endif %}
+  {% include "theme_toggle.html" %}
+</div>
+{% endblock %}

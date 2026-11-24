@@ -1,0 +1,1 @@
+<span class="badge {{ job.status|lower }}">{% if job.status == "PENDING" %}대기{% elif job.status == "STARTED" %}처리 중{% elif job.status == "SUCCESS" %}완료{% else %}실패{% endif %}</span>

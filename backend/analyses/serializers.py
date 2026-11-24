@@ -4,6 +4,7 @@ from pathlib import Path
 from rest_framework import serializers
 
 from .models import AnalysisJob, PersonPrediction
+from .video_formats import VIDEO_FORMAT_LABEL, VIDEO_MIME
 
 MAX_VIDEO_BYTES = 64 * 1024 * 1024
 
@@ -26,11 +27,20 @@ class JobMetadataSerializer(RestrictedInput):
 
 
 class JobCreateSerializer(JobMetadataSerializer):
-    video = serializers.FileField(write_only=True)
+    input_type = serializers.ChoiceField(choices=AnalysisJob.Source.choices, default=AnalysisJob.Source.UPLOAD)
+    video = serializers.FileField(write_only=True, required=False)
+
+    def validate(self, attrs):
+        source = attrs["input_type"]
+        if source == AnalysisJob.Source.UPLOAD and "video" not in attrs:
+            raise serializers.ValidationError({"video": "영상 파일을 선택하세요."})
+        if source == AnalysisJob.Source.IP_WEBCAM:
+            raise serializers.ValidationError({"input_type": "카메라를 켠 뒤 같은 화면에서 분석을 시작하세요."})
+        return attrs
 
     def validate_video(self, video):
-        if Path(video.name).suffix.lower() != ".mp4":
-            raise serializers.ValidationError("MP4 파일을 선택하세요.")
+        if Path(video.name).suffix.lower() not in VIDEO_MIME:
+            raise serializers.ValidationError(f"지원 형식: {VIDEO_FORMAT_LABEL}.")
         if video.size > MAX_VIDEO_BYTES:
             raise serializers.ValidationError("영상은 최대 64 MiB까지 업로드할 수 있습니다.")
         return video
@@ -47,6 +57,6 @@ class JobReadSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AnalysisJob
-        fields = ("id", "title", "memo", "original_filename", "status", "result_status",
+        fields = ("id", "title", "memo", "input_type", "original_filename", "status", "phase", "result_status",
                   "error_message", "frames_read", "processing_time_sec",
                   "created_at", "finished_at", "predictions")

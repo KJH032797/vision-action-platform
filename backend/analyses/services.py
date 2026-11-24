@@ -7,25 +7,44 @@ from django.utils import timezone
 import httpx
 
 from .models import AnalysisJob, PersonPrediction
+from .video_formats import VIDEO_MIME
 
 
 class AnalysisFailure(Exception):
     pass
 
 
-def request_prediction(job):
+def send_video(video, filename, mode):
     url = settings.FASTAPI_BASE_URL.rstrip("/") + "/predict/video"
-    # Django opens the private file and sends it as multipart field "file".
-    with job.video.open("rb") as video:
-        response = httpx.post(
-            url,
-            files={"file": (job.original_filename, video, "video/mp4")},
-            timeout=settings.FASTAPI_TIMEOUT_SECONDS,
-        )
+    mime = VIDEO_MIME[Path(filename).suffix.lower()]
+    response = httpx.post(
+        url, files={"file": (filename, video, mime)}, data={"mode": mode},
+        timeout=settings.FASTAPI_TIMEOUT_SECONDS,
+    )
+    if response.status_code == 415:
+        detail = response.json().get("detail", {})
+        if isinstance(detail, dict) and detail.get("code") == "VIDEO_FORMAT_MISMATCH":
+            raise AnalysisFailure("VIDEO_FORMAT_MISMATCH: 파일 확장자와 실제 영상 형식이 다릅니다.")
+        raise AnalysisFailure("UNSUPPORTED_VIDEO_FORMAT: 지원 영상 형식으로 다시 올려 주세요.")
     if response.status_code == 422:
-        raise AnalysisFailure("INVALID_VIDEO: AI 서비스가 영상을 읽지 못했습니다.")
+        raise AnalysisFailure("INVALID_VIDEO: 지원되지 않는 코덱이거나 영상이 손상돼 읽지 못했습니다.")
+    if response.status_code == 413:
+        raise AnalysisFailure("VIDEO_LIMIT_EXCEEDED: 업로드 영상의 크기, 길이 또는 추적량이 한도를 넘었습니다. 60초 이내의 짧은 영상으로 다시 올려 주세요.")
     response.raise_for_status()
     return response.json()
+
+
+def set_phase(job, phase):
+    AnalysisJob.objects.filter(pk=job.pk).update(phase=phase)
+
+
+def request_prediction(job):
+    set_phase(job, AnalysisJob.Phase.ANALYZING)
+    if not job.video:
+        raise AnalysisFailure("CAMERA_FILE_MISSING: 분석할 녹화 파일이 없습니다.")
+    mode = "upload" if job.input_type == AnalysisJob.Source.UPLOAD else "webcam"
+    with job.video.open("rb") as video:
+        return send_video(video, job.original_filename, mode)
 
 
 def valid_number(value, minimum=0, maximum=None):
@@ -55,11 +74,11 @@ def result_rows(job, payload):
         observed = item["observed_frames"]
         valid = item["valid_frames"]
         if (type(track_id) is not int or track_id < 0 or track_id in seen
-                or status not in ("PREDICTED", "LOW_CONFIDENCE", "INSUFFICIENT_POSE")
+                or status not in ("PREDICTED", "LOW_CONFIDENCE", "INSUFFICIENT_POSE", "INSUFFICIENT_DURATION")
                 or not isinstance(label, str) or not 0 < len(label) <= 40
                 or (label == "UNKNOWN") != (status != "PREDICTED")
                 or (confidence is not None and not valid_number(confidence, maximum=1))
-                or (confidence is None) != (status == "INSUFFICIENT_POSE")
+                or (confidence is None) != (status in ("INSUFFICIENT_POSE", "INSUFFICIENT_DURATION"))
                 or type(observed) is not int or type(valid) is not int
                 or not 0 <= valid <= observed <= frames):
             raise ValueError("Invalid track payload")
@@ -91,9 +110,10 @@ def save_failure(job, message):
     job.save(update_fields=["status", "error_message", "finished_at"])
 
 
-def create_job(user, *, video, title="", memo=""):
+def create_job(user, *, input_type=AnalysisJob.Source.UPLOAD, video=None, title="", memo=""):
     return AnalysisJob.objects.create(
-        user=user, video=video, original_filename=Path(video.name).name, title=title, memo=memo
+        user=user, input_type=input_type, video=video if video is not None else "",
+        original_filename=Path(video.name).name if video is not None else "", title=title, memo=memo
     )
 
 
@@ -125,7 +145,10 @@ def submit_analysis(user, **data):
     if settings.ANALYSIS_MODE == "sync":
         # Keep the previous flow available for an explicit local demo.
         job = create_job(user, **data)
-        run_analysis(job.pk)
+        if job.input_type == AnalysisJob.Source.IP_WEBCAM:
+            save_failure(job, "CAMERA_REQUIRES_WORKER: 카메라는 Celery 실행 모드에서 사용할 수 있습니다.")
+        else:
+            run_analysis(job.pk)
         job.refresh_from_db()
         return job
 

@@ -55,6 +55,8 @@ def load_models():
     frame_width = len(FRAME_FEATURE_NAMES)
     input_width = steps * frame_width
     require(steps == baseline["sequence_steps"] == 30, "Expected 30 sequence steps")
+    require(training["min_valid_frames"] == baseline["min_valid_frames"] == 10,
+            "Expected at least 10 valid frames for Day06 clips")
     require(frame_width == 38 and training["feature_count"] == input_width == 1140,
             "Expected 38 features per step and 1140 total")
     require(columns == sequence_feature_names(steps),

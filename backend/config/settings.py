@@ -83,3 +83,21 @@ CELERY_TASK_IGNORE_RESULT = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_SOFT_TIME_LIMIT = int(FASTAPI_TIMEOUT_SECONDS) + 30
 CELERY_TASK_TIME_LIMIT = CELERY_TASK_SOFT_TIME_LIMIT + 15
+
+IP_WEBCAM_URL = os.environ.get("IP_WEBCAM_URL", "")
+IP_WEBCAM_CAPTURE_SECONDS = os.environ.get("IP_WEBCAM_CAPTURE_SECONDS", "8")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {"quiet_camera_frames": {"()": "analyses.log_filters.QuietCameraFrames"}},
+    "formatters": {
+        "runserver": {"()": "django.utils.log.ServerFormatter", "format": "[{server_time}] {message}",
+                      "style": "{"},
+    },
+    "handlers": {
+        "runserver": {"class": "logging.StreamHandler", "formatter": "runserver",
+                      "filters": ["quiet_camera_frames"]},
+    },
+    "loggers": {"django.server": {"handlers": ["runserver"], "level": "INFO", "propagate": False}},
+}

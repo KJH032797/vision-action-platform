@@ -4,3 +4,4 @@ psycopg[binary]==3.3.7
 httpx==0.28.1
 celery[redis]==5.7.0
 redis==8.1.0
+opencv-python==5.0.0.93

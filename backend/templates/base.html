@@ -1,21 +1,29 @@
-<!doctype html>
-<html lang="ko">
+{% load static %}<!doctype html>
+<html lang="ko" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}동작 분석{% endblock %}</title>
+  <title>{% block title %}Vision Action{% endblock %}</title>
+  <script src="{% static 'analyses/theme.js' %}"></script>
+  <link rel="stylesheet" href="{% static 'analyses/workspace.css' %}">
 </head>
-<body>
-<header>
-  <a href="{% url 'analysis_list' %}">동작 분석</a>
-  {% if user.is_authenticated %}
-    <span>{{ user.username }}</span>
-    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button>로그아웃</button></form>
-  {% else %}
-    <a href="{% url 'login' %}">로그인</a>
-    <a href="{% url 'signup' %}">회원가입</a>
-  {% endif %}
+<body class="{% block body_class %}{% endblock %}">
+<a href="#main-content" class="skip-link">본문으로 건너뛰기</a>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="{% url 'analysis_list' %}"><span class="brand-mark" aria-hidden="true">V</span>Vision Action</a>
+    <nav class="site-nav" aria-label="주 메뉴">
+      {% if user.is_authenticated %}
+        <a href="{% url 'analysis_list' %}" {% if request.resolver_match.url_name == 'analysis_list' %}aria-current="page"{% endif %}>분석</a>
+        {% if user.is_staff %}<a href="{% url 'dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>직원 통계</a>{% endif %}
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="button quiet">로그아웃</button></form>
+      {% else %}
+        <a href="{% url 'login' %}">로그인</a><a href="{% url 'signup' %}">회원가입</a>
+      {% endif %}
+      {% include "theme_toggle.html" %}
+    </nav>
+  </div>
 </header>
-<main>{% block content %}{% endblock %}</main>
+<main id="main-content" class="workspace">{% block content %}{% endblock %}</main>
 </body>
 </html>

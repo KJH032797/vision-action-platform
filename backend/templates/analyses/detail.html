@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}분석 결과 · Vision Action{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'analyses/comparison.css' %}">{% endblock %}
 {% block content %}
 <a class="back-link" href="{% url 'analysis_list' %}">← 내 분석 목록</a>
 <section class="page-heading result-heading"><div><h1>{{ job.title|default:job.original_filename|default:job.get_input_type_display }}</h1><p>#{{ job.pk }} · {{ job.get_input_type_display }} · {{ job.created_at|date:"Y.m.d H:i" }}</p></div><div id="job-header-status">{% include "analyses/status_badge.html" %}</div></section>
+{% include "analyses/comparison.html" %}
 <div class="result-grid">
   <section class="card result-card" aria-labelledby="state-heading">
     <div class="card-title"><h2 id="state-heading">분석 상태</h2></div>

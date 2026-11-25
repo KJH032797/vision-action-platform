@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_safe
 
 from .models import AnalysisJob
+from .playback import playback_context
 from .serializers import JobCreateSerializer
 from .services import submit_analysis
 from .video_formats import VIDEO_ACCEPT, VIDEO_FORMAT_LABEL
@@ -39,6 +40,7 @@ def analysis_detail(request, pk):
     has_code = bool(separator and code.isascii() and code.isupper() and "_" in code)
     return render(request, "analyses/detail.html", {
         "job": job,
+        **playback_context(job),
         "error_code": code if has_code else "",
         "error_text": message if has_code else job.error_message,
     })

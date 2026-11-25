@@ -1,0 +1,32 @@
+{% load static %}
+<section class="card result-card video-comparison" aria-labelledby="video-heading" data-video-comparison>
+  <div class="card-title"><h2 id="video-heading">{% if can_compare %}원본 / 추적 영상{% else %}작업 영상{% endif %}</h2></div>
+  <p class="muted" data-video-message role="status" {% if not playback_reason %}hidden{% endif %}>{{ playback_reason }}</p>
+  {% if can_play_original %}
+    <div class="comparison-stage" data-stage>
+      <video data-original controls playsinline preload="metadata"
+          {% if can_fallback_source %}data-source-url="{% url 'analysis_video' job.pk 'source' %}"{% endif %}
+          src="{% url 'analysis_video' job.pk 'original' %}" aria-label="원본 영상"></video>
+      {% if can_compare %}
+        <video data-overlay hidden muted playsinline preload="auto"
+            src="{% url 'analysis_video' job.pk 'overlay' %}" aria-hidden="true"></video>
+        <div class="comparison-divider" data-divider hidden>
+          <span class="comparison-label comparison-left">원본</span>
+          <span class="comparison-label comparison-right">관절 추적</span>
+          <span class="comparison-handle" aria-hidden="true">‹ ›</span>
+          <input type="range" min="0" max="100" value="50" data-wipe
+                 aria-label="원본과 추적 영상 경계">
+        </div>
+      {% endif %}
+    </div>
+    {% if can_compare %}
+      <div class="comparison-controls" data-controls hidden>
+        <button class="button" type="button" data-play>재생</button>
+        <input type="range" min="0" max="0" step="any" value="0" data-timeline
+               aria-label="두 영상의 재생 위치" disabled>
+        <span class="muted" data-time aria-hidden="true">0:00</span>
+      </div>
+    {% endif %}
+    <script src="{% static 'analyses/comparison.js' %}" defer></script>
+  {% endif %}
+</section>

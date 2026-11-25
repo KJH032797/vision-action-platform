@@ -17,6 +17,11 @@ def upload_path(instance, filename):
     return f"uploads/{uuid4().hex}{suffix}"
 
 
+
+def preview_names(video_name):
+    return f"{video_name}.original.mp4", f"{video_name}.overlay.mp4"
+
+
 class AnalysisJob(models.Model):
     class Source(models.TextChoices):
         UPLOAD = "UPLOAD", "영상 업로드"
@@ -41,6 +46,7 @@ class AnalysisJob(models.Model):
     original_filename = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=10, choices=State.choices, default=State.PENDING)
     phase = models.CharField(max_length=10, choices=Phase.choices, blank=True)
+    media_status = models.CharField(max_length=12, blank=True)
     result_status = models.CharField(max_length=20, blank=True)
     error_message = models.CharField(max_length=255, blank=True)
     frames_read = models.PositiveIntegerField(null=True)
@@ -69,10 +75,12 @@ class PersonPrediction(models.Model):
 
 
 @receiver(post_delete, sender=AnalysisJob)
-def remove_private_upload(sender, instance, using, **kwargs):
+def remove_private_videos(sender, instance, using, **kwargs):
     if instance.video:
         storage, name = instance.video.storage, instance.video.name
-        transaction.on_commit(lambda: storage.delete(name), using=using, robust=True)
+        for filename in (name, *preview_names(name)):
+            transaction.on_commit(lambda filename=filename: storage.delete(filename),
+                                  using=using, robust=True)
 
 class CameraSession(models.Model):
     class State(models.TextChoices):

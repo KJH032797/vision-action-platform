@@ -42,22 +42,26 @@ class TrackState:
     next_sample: float = 0.0
 
 
-def tracked_features(result, keypoint_threshold):
+def tracked_poses(result):
     boxes = result.boxes
     if boxes is None or boxes.id is None:
-        return {}
+        return (), ()
     ids = boxes.id.int().cpu().tolist()
     keypoints = result.keypoints
     if keypoints is None or keypoints.conf is None:
-        return dict.fromkeys(ids)
+        return (), ids
 
     points = keypoints.xy.cpu().numpy()
     scores = keypoints.conf.cpu().numpy()
     if len(points) != len(ids) or len(scores) != len(ids):
-        return dict.fromkeys(ids)
+        return (), ids
 
-    features = {}
-    for track_id, xy, confidence in zip(ids, points, scores):
+    return tuple(zip(ids, points, scores)), ids
+
+
+def features_from_poses(poses, ids, keypoint_threshold):
+    features = dict.fromkeys(ids)
+    for track_id, xy, confidence in poses:
         # Use confidence for the shoulders, hips and limbs used by the angles
         # and normalization. Keep the original 38-D feature values and order.
         usable = confidence.shape == (17,) and np.all(confidence[5:] >= keypoint_threshold)
@@ -89,15 +93,15 @@ class VideoAnalyzer:
             for result in predictor.results
         )
 
-    def analyze(self, path, mode: AnalysisMode = "webcam"):
+    def analyze(self, path, mode: AnalysisMode = "webcam", preview=None):
         # YOLO's predictor and ByteTrack are mutable. Never share their state
         # between simultaneous requests or consecutive videos.
         with self.lock:
             for tracker in getattr(self.pose.predictor, "trackers", []):
                 tracker.reset()
-            return self.read_video(path, mode)
+            return self.read_video(path, mode, preview)
 
-    def read_video(self, path, mode: AnalysisMode):
+    def read_video(self, path, mode: AnalysisMode, preview=None):
         try:
             capture = cv2.VideoCapture(str(path), cv2.CAP_FFMPEG)
         except cv2.error as error:
@@ -113,6 +117,9 @@ class VideoAnalyzer:
                 raise InvalidVideo("Could not open the video or read its frame rate.")
 
             expected_frames = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+            sar_num = capture.get(cv2.CAP_PROP_SAR_NUM)
+            sar_den = capture.get(cv2.CAP_PROP_SAR_DEN)
+            sar = sar_num / sar_den if sar_num > 0 and sar_den > 0 else 1
             while True:
                 try:
                     ok, frame = capture.read()
@@ -134,7 +141,11 @@ class VideoAnalyzer:
                     verbose=False,
                 )[0]
                 detected |= self.detected_in_frame
-                features = tracked_features(result, self.config["keypoint_confidence"])
+                poses, ids = tracked_poses(result)
+                threshold = self.config["keypoint_confidence"]
+                features = features_from_poses(poses, ids, threshold)
+                if preview is not None:
+                    preview.write(frame, poses, threshold, capture.get(cv2.CAP_PROP_POS_MSEC), fps, sar)
                 if mode == "upload":
                     observations += len(features)
                     if observations > MAX_UPLOAD_OBSERVATIONS:

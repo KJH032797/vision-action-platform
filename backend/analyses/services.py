@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 import httpx
 
+from .comparison import COMPARISON_TYPE, receive_comparison
 from .models import AnalysisJob, PersonPrediction
 from .video_formats import VIDEO_MIME
 
@@ -14,24 +15,29 @@ class AnalysisFailure(Exception):
     pass
 
 
-def send_video(video, filename, mode):
+def send_video(job, video, filename, mode):
     url = settings.FASTAPI_BASE_URL.rstrip("/") + "/predict/video"
     mime = VIDEO_MIME[Path(filename).suffix.lower()]
-    response = httpx.post(
-        url, files={"file": (filename, video, mime)}, data={"mode": mode},
+    with httpx.stream(
+        "POST", url, files={"file": (filename, video, mime)},
+        data={"mode": mode, "comparison": "true"},
         timeout=settings.FASTAPI_TIMEOUT_SECONDS,
-    )
-    if response.status_code == 415:
-        detail = response.json().get("detail", {})
-        if isinstance(detail, dict) and detail.get("code") == "VIDEO_FORMAT_MISMATCH":
-            raise AnalysisFailure("VIDEO_FORMAT_MISMATCH: 파일 확장자와 실제 영상 형식이 다릅니다.")
-        raise AnalysisFailure("UNSUPPORTED_VIDEO_FORMAT: 지원 영상 형식으로 다시 올려 주세요.")
-    if response.status_code == 422:
-        raise AnalysisFailure("INVALID_VIDEO: 지원되지 않는 코덱이거나 영상이 손상돼 읽지 못했습니다.")
-    if response.status_code == 413:
-        raise AnalysisFailure("VIDEO_LIMIT_EXCEEDED: 업로드 영상의 크기, 길이 또는 추적량이 한도를 넘었습니다. 60초 이내의 짧은 영상으로 다시 올려 주세요.")
-    response.raise_for_status()
-    return response.json()
+    ) as response:
+        if response.is_success and response.headers.get("content-type") == COMPARISON_TYPE:
+            return receive_comparison(job, response)
+        # Ordinary JSON errors and the pre-comparison FastAPI response still work.
+        response.read()
+        if response.status_code == 415:
+            detail = response.json().get("detail", {})
+            if isinstance(detail, dict) and detail.get("code") == "VIDEO_FORMAT_MISMATCH":
+                raise AnalysisFailure("VIDEO_FORMAT_MISMATCH: 파일 확장자와 실제 영상 형식이 다릅니다.")
+            raise AnalysisFailure("UNSUPPORTED_VIDEO_FORMAT: 지원 영상 형식으로 다시 올려 주세요.")
+        if response.status_code == 422:
+            raise AnalysisFailure("INVALID_VIDEO: 지원되지 않는 코덱이거나 영상이 손상돼 읽지 못했습니다.")
+        if response.status_code == 413:
+            raise AnalysisFailure("VIDEO_LIMIT_EXCEEDED: 업로드 영상의 크기, 길이 또는 추적량이 한도를 넘었습니다. 60초 이내의 짧은 영상으로 다시 올려 주세요.")
+        response.raise_for_status()
+        return response.json()
 
 
 def set_phase(job, phase):
@@ -44,7 +50,7 @@ def request_prediction(job):
         raise AnalysisFailure("CAMERA_FILE_MISSING: 분석할 녹화 파일이 없습니다.")
     mode = "upload" if job.input_type == AnalysisJob.Source.UPLOAD else "webcam"
     with job.video.open("rb") as video:
-        return send_video(video, job.original_filename, mode)
+        return send_video(job, video, job.original_filename, mode)
 
 
 def valid_number(value, minimum=0, maximum=None):
